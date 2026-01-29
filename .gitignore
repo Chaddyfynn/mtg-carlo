@@ -1,2 +1,3 @@
 *.fs
 *.fs.old
+my_db*
