@@ -51,9 +51,15 @@ def draw_starting_hand(library, mul_max, land_min):
     n_mul = 0
     library, hand = draw_hand(library)
     to_mulligan = to_mulligan_or_not_to_mulligan(hand, n_mul, mul_max, land_min)
+    if DEBUG:
+        print(f"Initial hand (mul {n_mul}): {hand}")
     while to_mulligan:
+        if DEBUG:
+            print(f"Mulligan decision: will mulligan (current mulligans={n_mul})")
         n_mul += 1
         library, hand = mulligan(library, hand, n_mul)
+        if DEBUG:
+            print(f"After mulligan {n_mul}, hand: {hand}")
         to_mulligan = to_mulligan_or_not_to_mulligan(hand, n_mul, mul_max, land_min)
     return library, hand
 
@@ -80,7 +86,8 @@ def mulligan(library, hand, n_mul):
         print(f"Performing mulligan number {n_mul}")
 
     library += hand
-    library = shuffle_library(deck)
+    # shuffle the library before drawing a new hand
+    library = shuffle_library(library)
     hand = PCardList()
     # Draw top 7 cards to hand
     for _ in range(7):
@@ -91,6 +98,8 @@ def mulligan(library, hand, n_mul):
     for i in range(n_mul - 1):
         hand, discard = discard_card(hand, starting=True)
         library.append(discard)
+    if DEBUG:
+        print(f"Mulligan {n_mul} discarded {n_mul-1} cards, new hand: {hand}")
     return library, hand
 
 # Determine whether to mulligan or not
@@ -123,9 +132,12 @@ def discard_card(hand, starting=False):
 def discard_card_by_mana(hand):
     # get index of the card with the highest mana cost
     idx = int(np.argmax([card.cmc for card in hand]))
-    # if DEBUG:
-    #     print(f"Discarding card {idx}")
     discard = hand[idx]
+    if DEBUG:
+        try:
+            print(f"Discarding card index {idx}: {discard}")
+        except Exception:
+            print(f"Discarding card at index {idx}")
     hand.pop(idx)
     return hand, discard
 
@@ -215,9 +227,14 @@ def attempt_cast_legendary_land(game_state, conditions):
         # Get list of legendary lands in hand
         legendary_lands = [card for card in hand if "Land" == card.type_line]
 
+        if DEBUG:
+            print(f"Legendary lands available: {legendary_lands}")
+
         # If there are more than 1 legendary lands in hand we must choose which one
         # Toy logic: pick randomly
         chosen_land = random.choice(legendary_lands)
+        if DEBUG:
+            print(f"Chosen legendary land: {chosen_land}")
 
         # Add the chosen legendary land to the battlefield
         game_state["battlefield"]["lands"].append(chosen_land)
@@ -239,6 +256,8 @@ def attempt_cast_land(game_state, conditions):
         chosen_land = lands_in_hand[0]
         game_state["battlefield"]["lands"].append(chosen_land)
         game_state["hand"].remove(chosen_land)
+        if DEBUG:
+            print(f"Played land: {chosen_land}")
         return game_state
 
     # If there are multiple lands in hand choose which one
@@ -250,6 +269,8 @@ def attempt_cast_land(game_state, conditions):
         if DEBUG:
             print("All lands in hand are of the same type, picking randomly")
         chosen_land = random.choice(lands_in_hand)
+        if DEBUG:
+            print(f"Chosen land (same type case): {chosen_land}")
         game_state["battlefield"]["lands"].append(chosen_land)
         game_state["hand"].remove(chosen_land)
         return game_state
@@ -258,18 +279,24 @@ def attempt_cast_land(game_state, conditions):
             print("Lands in hand are of different types, picking based on mana needs")
         # Look at the mana colours of other cards in hand
         all_costs = "".join([card.mana_cost for card in hand if "Land" not in card.type_line]).replace("{", "").replace("}", "")
+        if DEBUG:
+            print(f"Hand mana costs (concatenated): {all_costs}")
         # Get colour with greatest frequency
         mana_colours = {"U": 0, "B": 0, "R": 0, "G": 0, "W": 0 }
         for letter in all_costs:
             if letter not in mana_colours:
                 mana_colours[letter] = 0
             mana_colours[letter] += 1
+        if DEBUG:
+            print(f"Mana colour counts: {mana_colours}")
         # Get the colour with the highest count
         # If there are no colours needed, a tie, or the land doesn't produce any of the needed colours, pick randomly
         if all(value == 0 for value in mana_colours.values()) or len(set(mana_colours.values())) == 1:
             if DEBUG:
                 print("No preferred mana colour, picking land randomly")
             chosen_land = random.choice(lands_in_hand)
+            if DEBUG:
+                print(f"Chosen land (no preference): {chosen_land}")
             game_state["battlefield"]["lands"].append(chosen_land)
             game_state["hand"].remove(chosen_land)
             return game_state
@@ -283,6 +310,8 @@ def attempt_cast_land(game_state, conditions):
             for card in lands_in_hand:
                 if preferred_colour in card.color_identity:
                     chosen_land = card
+                    if DEBUG:
+                        print(f"Chosen land based on colour {preferred_colour}: {chosen_land}")
                     game_state["battlefield"]["lands"].append(chosen_land)
                     game_state["hand"].remove(chosen_land)
                     return game_state
@@ -339,7 +368,7 @@ parser = argparse.ArgumentParser("Mana Ramp Simulation")
 parser.add_argument("--update", help="Updates the local MTG card database from Scryfall", action="store_true")
 args = parser.parse_args()
 
-mtg_db = MtgDB('/home/c5046848/lab/fun/mtg/my_db.fs')
+mtg_db = MtgDB('./my_db.fs')
 cards = mtg_db.root.scryfall_cards
 
 
@@ -353,7 +382,7 @@ if args.update:
 # Single Game Logic
 # ------------------
 
-deck_string = open("/home/c5046848/lab/fun/mtg/Vren.txt").read()
+deck_string = open("./Vren.txt").read()
 deck = cards.from_str(deck_string)
 
 library, cmdr = pop_commander(COMMANDER, deck)
